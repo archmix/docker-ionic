@@ -1,0 +1,71 @@
+version: 2.1
+
+orbs: 
+  docker: archmix/docker@1.1.0
+
+jobs:
+  build:
+    executor: docker/default
+    steps:
+      - checkout
+      - setup_remote_docker
+      - docker/build:
+          org_name: archmixoss
+          image_name: ionic
+          image_version: latest
+          dockerfile: ./
+
+  release:
+    executor: docker/default
+    steps:
+      - setup_remote_docker
+      - attach_workspace:
+          at: /tmp/workspace
+      - docker/push :
+          org_name: archmixoss
+          image_name: ionic
+          image_version: latest
+
+  release-tag:
+    executor: docker/default
+    steps:
+      - setup_remote_docker
+      - attach_workspace:
+          at: /tmp/workspace
+      - docker/push :
+          org_name: archmixoss
+          image_name: ionic
+          image_version: ${CIRCLE_TAG/v/''}
+          should_tag : true
+
+workflows:
+  version: 2
+  build-release:
+    jobs:
+      - build:
+          context: Archmix
+      - release:
+          context: Archmix
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
+  build-tags:
+    jobs:
+      - build:
+          context: Archmix
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-tag:
+          context: Archmix
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
