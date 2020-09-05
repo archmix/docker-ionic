@@ -1,4 +1,4 @@
-FROM node:12.18.3-buster
+FROM archmixoss/angular
 
 # -----------------------------------------------------------------------------
 # General dependencies
@@ -25,57 +25,55 @@ RUN \
   apt-get update && \
   apt-get install adoptopenjdk-8-hotspot -qqy
 
-# -----------------------------------------------------------------------------
-# Install Android / Android SDK / Android SDK elements
-# -----------------------------------------------------------------------------
+#ANDROID STUFF
+ENV ANDROID_HOME=/opt/android-sdk-linux
 
-ENV ANDROID_HOME /opt/android-sdk-linux
-ENV PATH ${PATH}:${ANDROID_HOME}/tools:${ANDROID_HOME}/tools/bin:${ANDROID_HOME}/platform-tools:/opt/tools
+RUN echo ANDROID_HOME="${ANDROID_HOME}" >> /etc/environment && \
+    dpkg --add-architecture i386 && \
+    apt-get update && \
+    apt-get install -y expect ant wget zipalign libc6-i386 lib32stdc++6 lib32gcc1 lib32ncurses6 lib32z1 qemu-kvm kmod && \
+    apt-get clean && \
+    apt-get autoclean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-ARG ANDROID_PLATFORMS_VERSION
-ENV ANDROID_PLATFORMS_VERSION ${ANDROID_PLATFORMS_VERSION:-25}
+# Install Android SDK
+RUN cd /opt && \
+    wget --output-document=android-sdk.tgz --quiet http://dl.google.com/android/android-sdk_r24.4.1-linux.tgz && \
+    tar xzf android-sdk.tgz && \
+    rm -f android-sdk.tgz && \
+    chown -R root. /opt
 
-ARG ANDROID_BUILD_TOOLS_VERSION
-ENV ANDROID_BUILD_TOOLS_VERSION ${ANDROID_BUILD_TOOLS_VERSION:-25.0.3}
+ENV GRADLE_VERSION=6.5
 
-RUN \
-  echo ANDROID_HOME=${ANDROID_HOME} >> /etc/environment && \
-  dpkg --add-architecture i386 && \
-  apt-get update -qqy && \
-  apt-get install -qqy --allow-unauthenticated\
-          gradle  \
-          libc6-i386 \
-          lib32stdc++6 \
-          lib32gcc1 \
-          lib32ncurses6 \
-          lib32z1 \
-          qemu-kvm \
-          kmod && \
-  cd /opt && \
-  mkdir android-sdk-linux && \
-  cd android-sdk-linux && \
-  curl -SLo sdk-tools-linux.zip https://dl.google.com/android/repository/sdk-tools-linux-3859397.zip && \
-  unzip sdk-tools-linux.zip && \
-  rm -f sdk-tools-linux.zip && \
-  chmod 777 ${ANDROID_HOME} -R  && \
-  mkdir -p ${ANDROID_HOME}/licenses && \
-  echo 8933bad161af4178b1185d1a37fbf41ea5269c55 > ${ANDROID_HOME}/licenses/android-sdk-license && \
-  sdkmanager "tools" && \  
-  sdkmanager "platform-tools" && \
-  sdkmanager "platforms;android-${ANDROID_PLATFORMS_VERSION}" && \
-  sdkmanager "build-tools;${ANDROID_BUILD_TOOLS_VERSION}"
+# Install Gradle
+RUN wget https://services.gradle.org/distributions/gradle-"$GRADLE_VERSION"-all.zip && \
+    mkdir /opt/gradle && \
+    unzip -d /opt/gradle gradle-"$GRADLE_VERSION"-all.zip && \
+    rm -rf gradle-"$GRADLE_VERSION"-all.zip
+
+# Setup environment
+ENV PATH ${PATH}:${ANDROID_HOME}/tools:${ANDROID_HOME}/platform-tools:/opt/tools:/opt/gradle/gradle-"$GRADLE_VERSION"/bin
+
+# Install sdk elements
+COPY tools /opt/tools
+
+RUN ["/opt/tools/android-accept-licenses.sh", "android update sdk --all --no-ui --filter platform-tools,tools,build-tools-29.0.2,android-29,extra-android-support,extra-android-m2repository,extra-google-m2repository"]
+RUN unzip ${ANDROID_HOME}/temp/*.zip -d ${ANDROID_HOME}
 
 # -----------------------------------------------------------------------------
 # Install Ionic Cli
 # -----------------------------------------------------------------------------
 RUN \
-  npm install -g @ionic/cli
+  npm i -g @ionic/cli
 
 # -----------------------------------------------------------------------------
-# WORKDIR is the generic /app folder. All volume mounts of the actual project
-# code need to be put into /app.
+# Install Cordova
 # -----------------------------------------------------------------------------
-WORKDIR /app
+RUN \
+  npm i -g cordova
+
+RUN \
+  npm i -g cordova-res --unsafe-perm
 
 # -----------------------------------------------------------------------------
 # Ng Dev Server port expose
